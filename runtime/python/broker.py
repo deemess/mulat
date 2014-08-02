@@ -1,17 +1,24 @@
 # coding: utf-8
+import os
 
 import ConfigParser
 import logging
+import subprocess
 import zmq
-from zmq.eventloop import ioloop, zmqstream
+from zmq.eventloop import zmqstream
 
 
 class Broker(object):
     """
-
+    Main Broker class
     """
 
     def __init__(self, **kwargs):
+        """
+        You can pass broker config file path here
+        :param kwargs:
+        :return:
+        """
         for key, value in kwargs.iteritems():
             setattr(self, key, value)
 
@@ -22,23 +29,34 @@ class Broker(object):
         self.config = ConfigParser.ConfigParser()
         self.logger = logging.getLogger('BROKER')
         self.zmq_context = zmq.Context()
+        self.poller = zmq.Poller()
         self.pubs = None
         self.subs = None
 
         # initialization
         self.load_config()
         self.setup_logging()
+        self.logger.info("Loading modules configurations")
+        self.load_modules()
         self.logger.info("Running BROKER")
         self.bind()
-        self.logger.info("Installing ioloop")
-        ioloop.install()
+        # self.logger.info("Installing ioloop")
+        # ioloop.install()
 
         self.run_mainloop()
 
     def load_config(self):
+        """
+        Loads broker config
+        :return:
+        """
         self.config.read(self.config_file)
 
     def setup_logging(self):
+        """
+        Sets up broker logging
+        :return:
+        """
         # TODO: make option for formatting
         formatter = logging.Formatter(
             "%(asctime)s|%(name)s|%(levelname)s| %(message)s")
@@ -54,9 +72,41 @@ class Broker(object):
             stream_log.setFormatter(formatter)
             self.logger.addHandler(stream_log)
 
+    def load_modules(self):
+        """
+        Loads module's config files and runs modules
+        :return:
+        """
+        modules = self.config.get("main", "modules")
+        modules_list = modules.split(",")
+
+        modules_list = [modules_list[0]]  # TODO remove after debug
+
+        self.logger.info("Modules count: {count}".format(
+            count=len(modules_list)))
+
+        for module_conf in modules_list:
+            config_file_dir = os.path.abspath(module_conf)
+            config_file = os.path.join(config_file_dir, "module.conf")
+            config = ConfigParser.ConfigParser()
+            config.read(config_file)
+
+            module_name = config.get("common", "module")
+            module_startcmd = config.get("common", "startcmd")
+
+            pwd = os.path.dirname(config_file)
+            subprocess.Popen(module_startcmd.split(" "), cwd=pwd)
+
     def bind(self):
+        """
+        Binds broker
+        :return:
+        """
         self.pubs = self.zmq_context.socket(zmq.PUB)
         self.subs = self.zmq_context.socket(zmq.SUB)
+
+        stream_sub = zmqstream.ZMQStream(self.subs)
+        stream_sub.on_recv(self.get_message)
 
         address = self.config.get("main", "listen")
         pub_port = self.config.get("main", "pubPort")
@@ -69,31 +119,32 @@ class Broker(object):
         self.logger.info("Binding PUB on '{0}'".format(pub_conn_string))
         self.pubs.bind(pub_conn_string)
         self.logger.info("Binding SUB on '{0}'".format(sub_conn_string))
-        self.subs.bind(sub_conn_string)
-        self.subs.setsockopt_string(zmq.SUBSCRIBE, "".decode("utf8"))
+        self.subs.connect(sub_conn_string)
+        self.subs.setsockopt_string(zmq.SUBSCRIBE, u"")
+        # self.subs.setsockopt(zmq.SUBSCRIBE, "9")
 
     def run_mainloop(self):
+        """
+        Runs main receive procedure
+        :return:
+        """
+        self.logger.info("Registering sockets")
+        self.poller.register(self.subs, zmq.POLLIN)
+
         self.logger.info("Running mainloop")
-        ioloop.IOLoop.instance().start()
+        should_continue = True
+        while should_continue:
+            socks = dict(self.poller.poll())
 
+            if self.subs in socks and socks[self.subs] == zmq.POLLIN:
+                message = self.subs.recv()
+                print message
 
-# def main():
+    @staticmethod
+    def get_message(msg):
+        print "Received message: %s" % msg
 
-
-    # context = zmq.Context()
-    # pubs = context.socket(zmq.PUB)
-    # pubs.bind("tcp://*:7570")
-    # subs = context.socket(zmq.SUB)
-    # subs.bind("tcp://*:7770")
-    # subs.setsockopt_string(zmq.SUBSCRIBE, "".decode("ascii"))
-    
-    # while True:
-    #     message = subs.recv_string()
-    #     print message
-    #     pubs.send_string(message)
-
-    # while True:
-    #     pass
 
 if __name__ == "__main__":
+
     broker = Broker()
