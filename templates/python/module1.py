@@ -55,48 +55,27 @@ conn_str = "tcp://%s:%s" % (addr, port)
 print "Binding to %s" % conn_str
 socket.bind(conn_str)
 
-# for reqnum in range(10):
-#     messagedata = "module2.in.input1|String|hellow module 2"
-#
-#
-#
-#     print "%s" % (messagedata)
-#     socket.send("%s" % (messagedata))
-#     time.sleep(1)
+import thread
 
-def send_heartbeat():
-    messagedata = "module1.heart|beat"
+# heartbeat
+def heartbeat():
+    while True:
+        messagedata = "module1.heart|beat"
+        socket.send_string(messagedata)
+        time.sleep(1)
+
+# msgloop
+def msgloop():
+    while True:
+        messagedata = "module1.string|content string"
+        socket.send_string(messagedata)
+        time.sleep(1)
+
+thread.start_new_thread(heartbeat, ())
+thread.start_new_thread(msgloop, ())
+#
+#
+while True:
+    messagedata = "module1.some|string|useful data"
     socket.send("%s" % (messagedata))
-    # print(messagedata)
-    # import sys
-    # sys.stdout.write(messagedata)
-
-import threading
-# from threading import Timer
-
-started = False
-
-def heartbeat_timer():
-    # threading.Timer(1, heartbeat_timer).start()
-    t = threading.Timer(1, heartbeat_timer)
-    t.start()
-
-    # if started:
-    #     t.join()
-    # else:
-    #     t.start()
-
-    send_heartbeat()
-
-# heartbeat_timer = Timer(1.0, send_heartbeat)
-# heartbeat_timer.start()
-print "wait"
-time.sleep(0.5)
-heartbeat_timer()
-
-messagedata = "module1.some|string|useful data"
-socket.send("%s" % (messagedata))
-messagedata = "module1.some|string|useful data"
-socket.send("%s" % (messagedata))
-messagedata = "module1.some|string|useful data"
-socket.send("%s" % (messagedata))
+    time.sleep(1)
