@@ -9,6 +9,8 @@ import subprocess
 import zmq
 from zmq.eventloop import zmqstream
 
+from message import Message
+
 
 class Broker(object):
     """
@@ -22,7 +24,9 @@ class Broker(object):
         :return:
         """
         self.modules_list = []
-        self.modules_process_list = []
+        # self.modules_process_list = []
+        self.modules_process_dict = {}
+        self.message = Message()
 
         for key, value in kwargs.iteritems():
             setattr(self, key, value)
@@ -88,7 +92,7 @@ class Broker(object):
         modules = self.config.get("main", "modules")
         self.modules_list = modules.split(",")
 
-        self.modules_list = [self.modules_list[0]]  # TODO remove after debug
+        # self.modules_list = [self.modules_list[0]]  # TODO remove after debug
         self.logger.info(self.modules_list)
 
         self.logger.info("Modules count: {count}".format(
@@ -96,7 +100,8 @@ class Broker(object):
 
     def run_modules(self):
         for module_conf in self.modules_list:
-            config_file_dir = os.path.abspath(os.path.normpath(module_conf.strip()))
+            config_file_dir = os.path.abspath(
+                os.path.normpath(module_conf.strip()))
             config_file = os.path.join(config_file_dir, "module.conf")
             self.logger.info("Loading '{0}'".format(config_file))
             config = ConfigParser.ConfigParser()
@@ -110,7 +115,12 @@ class Broker(object):
             self.logger.debug("Module run command: '{0}'".format(process_cmd))
             process = subprocess.Popen(process_cmd, cwd=pwd)
 
-            self.modules_process_list.append(process)
+            # self.modules_process_list.append(process)
+
+            self.modules_process_dict[module_name] = {
+                "name": module_name,
+                "process": process
+            }
 
     def bind(self):
         """
@@ -142,7 +152,7 @@ class Broker(object):
         Runs main receive procedure
         :return:
         """
-        self.logger.info("Registering sockets")
+        self.logger.info("Registering broker sockets")
         self.poller.register(self.subs, zmq.POLLIN)
 
         self.logger.info("Running mainloop")
@@ -154,7 +164,12 @@ class Broker(object):
                 message = self.subs.recv()
                 self.logger.debug("Broker received '{0}'".format(message))
                 time.sleep(1)
-                self.pubs.send(message + " RESENDED")
+
+                packed_msg = self.message.pack("module1.in.slot1",
+                                  Message.TYPE_STRING,
+                                  message + " RETRANSLATED")
+
+                self.pubs.send(packed_msg)
 
     def mainloop_thread(self):
         thread = threading.Thread(target=self.run_mainloop)

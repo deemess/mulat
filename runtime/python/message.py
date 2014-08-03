@@ -20,19 +20,17 @@ class Message(object):
         :param msg_content: message content
         :return: packed message string
         """
+
+        # heartbeat uses special format
         if msg_type == self.TYPE_HEARTBEAT:
             return "{0}.heart|{1}".format(msg_target,
                                           self.TYPE_HEARTBEAT)
 
-        if msg_type == self.TYPE_STRING:
-            return "{0}|{1}|{2}".format(msg_target,
-                                        self.TYPE_STRING,
-                                        msg_content.encode("utf8"))
-
-        if msg_type == self.TYPE_BINARY:
+        # we will encode: binary, string
+        if msg_type == self.TYPE_BINARY or msg_type == self.TYPE_STRING:
             encoded_content = base64.b64encode(msg_content).encode("utf8")
             return "{0}|{1}|{2}".format(msg_target,
-                                        self.TYPE_BINARY,
+                                        msg_type,
                                         encoded_content)
 
     def unpack(self, packed_msg):

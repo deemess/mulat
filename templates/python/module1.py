@@ -85,7 +85,7 @@ def msgloop():
 
 # rcvloop
 def rcvloop():
-    print("Registering sockets")
+    print("Registering module sockets")
     poller.register(sub_socket, zmq.POLLIN)
     socks = dict(poller.poll())
 
