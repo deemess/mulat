@@ -1,5 +1,7 @@
 # coding: utf-8
 import os
+import time
+import threading
 
 import ConfigParser
 import logging
@@ -19,6 +21,9 @@ class Broker(object):
         :param kwargs:
         :return:
         """
+        self.modules_list = []
+        self.modules_process_list = []
+
         for key, value in kwargs.iteritems():
             setattr(self, key, value)
 
@@ -38,12 +43,15 @@ class Broker(object):
         self.setup_logging()
         self.logger.info("Loading modules configurations")
         self.load_modules()
+        self.logger.info("Running modules")
+        self.run_modules()
         self.logger.info("Running BROKER")
         self.bind()
         # self.logger.info("Installing ioloop")
         # ioloop.install()
 
-        self.run_mainloop()
+        # self.run_mainloop()
+        self.mainloop_thread()
 
     def load_config(self):
         """
@@ -78,16 +86,19 @@ class Broker(object):
         :return:
         """
         modules = self.config.get("main", "modules")
-        modules_list = modules.split(",")
+        self.modules_list = modules.split(",")
 
-        modules_list = [modules_list[0]]  # TODO remove after debug
+        self.modules_list = [self.modules_list[0]]  # TODO remove after debug
+        self.logger.info(self.modules_list)
 
         self.logger.info("Modules count: {count}".format(
-            count=len(modules_list)))
+            count=len(self.modules_list)))
 
-        for module_conf in modules_list:
-            config_file_dir = os.path.abspath(module_conf)
+    def run_modules(self):
+        for module_conf in self.modules_list:
+            config_file_dir = os.path.abspath(os.path.normpath(module_conf.strip()))
             config_file = os.path.join(config_file_dir, "module.conf")
+            self.logger.info("Loading '{0}'".format(config_file))
             config = ConfigParser.ConfigParser()
             config.read(config_file)
 
@@ -95,7 +106,11 @@ class Broker(object):
             module_startcmd = config.get("common", "startcmd")
 
             pwd = os.path.dirname(config_file)
-            subprocess.Popen(module_startcmd.split(" "), cwd=pwd)
+            process_cmd = module_startcmd.split(" ")
+            self.logger.debug("Module run command: '{0}'".format(process_cmd))
+            process = subprocess.Popen(process_cmd, cwd=pwd)
+
+            self.modules_process_list.append(process)
 
     def bind(self):
         """
@@ -119,9 +134,8 @@ class Broker(object):
         self.logger.info("Binding PUB on '{0}'".format(pub_conn_string))
         self.pubs.bind(pub_conn_string)
         self.logger.info("Binding SUB on '{0}'".format(sub_conn_string))
-        self.subs.connect(sub_conn_string)
+        self.subs.bind(sub_conn_string)
         self.subs.setsockopt_string(zmq.SUBSCRIBE, u"")
-        # self.subs.setsockopt(zmq.SUBSCRIBE, "9")
 
     def run_mainloop(self):
         """
@@ -138,7 +152,14 @@ class Broker(object):
 
             if self.subs in socks and socks[self.subs] == zmq.POLLIN:
                 message = self.subs.recv()
-                print message
+                self.logger.debug("Broker received '{0}'".format(message))
+                time.sleep(1)
+                self.pubs.send(message + " RESENDED")
+
+    def mainloop_thread(self):
+        thread = threading.Thread(target=self.run_mainloop)
+        thread.start()
+        thread.join()
 
     @staticmethod
     def get_message(msg):
