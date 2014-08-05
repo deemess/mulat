@@ -9,6 +9,7 @@ import subprocess
 import zmq
 from zmq.eventloop import zmqstream
 
+from logging_manager import LoggingManager
 from message import Message
 
 
@@ -36,7 +37,7 @@ class Broker(object):
 
         # init internals
         self.config = ConfigParser.ConfigParser()
-        self.logger = logging.getLogger('BROKER')
+        self.logger = LoggingManager(self.config_file).setup_logger("BROKER")
         self.zmq_context = zmq.Context()
         self.poller = zmq.Poller()
         self.pubs = None
@@ -44,7 +45,6 @@ class Broker(object):
 
         # initialization
         self.load_config()
-        self.setup_logging()
         self.logger.info("Loading modules configurations")
         self.load_modules()
         self.logger.info("Running modules")
@@ -63,26 +63,6 @@ class Broker(object):
         :return:
         """
         self.config.read(self.config_file)
-
-    def setup_logging(self):
-        """
-        Sets up broker logging
-        :return:
-        """
-        # TODO: make option for formatting
-        formatter = logging.Formatter(
-            "%(asctime)s|%(name)s|%(levelname)s| %(message)s")
-        log_filename = self.config.get("log", "logFile")
-        file_log = logging.FileHandler(log_filename)
-        file_log.setFormatter(formatter)
-        self.logger.addHandler(file_log)
-        # TODO: make option for logging level
-        self.logger.setLevel(logging.DEBUG)
-
-        if self.config.getboolean("log", "logToStdout"):
-            stream_log = logging.StreamHandler()
-            stream_log.setFormatter(formatter)
-            self.logger.addHandler(stream_log)
 
     def load_modules(self):
         """
